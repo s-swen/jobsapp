@@ -1,16 +1,16 @@
-const { NotFoundError } = require('../errors')
+const { NotFoundError, BadRequestError } = require('../errors')
 const Job = require('../models/Job')
 const { StatusCodes } = require('http-status-codes')
 
 const getAllJobs = async (req, res) => {
-    const jobs = await Job.find({ createdBy: req.user.userId })
+    const jobs = await Job.find({ createdBy: req.user.userId }).sort('createdAt')
     res.status(StatusCodes.OK).json({ jobs, count: jobs.length })
 }
 
 const getJob = async (req, res) => {
-    // ★ UPDATED: find → findOne
-    const job = await Job.findOne({ _id: req.params.id })   // ← updated
-    if (!job) throw new NotFoundError('not found')
+    const { user: { userId }, params: { id: jobId } } = req
+    const job = await Job.findOne({ _id: jobId, createdBy: userId })   // ← updated
+    if (!job) throw new NotFoundError(`job with id: ${jobId} not found`)
     res.status(StatusCodes.OK).json({ job })
 }
 
@@ -21,23 +21,34 @@ const createJob = async (req, res) => {
 }
 
 const updateJob = async (req, res) => {
+    const {
+        user: { userId },
+        body: { company, position },
+        params: { id: jobId }
+    } = req
+    if (company === '' || position === '') {
+        throw new BadRequestError('Company or Postion must not be empty')
+    }
     const job = await Job.findOneAndUpdate(
-        {_id: req.params.id }, 
-        req.body, 
-        {new: true, runValidators: true}
+        { _id: jobId, createdBy: userId },
+        req.body,
+        { new: true, runValidators: true },
     )
-    if (!job) throw new NotFoundError('not found')
+    if (!job) throw new NotFoundError(`job with id: ${jobId} not found`)
     res.status(StatusCodes.OK).json({ job })
+
 }
 
 const deleteJob = async (req, res) => {
-    // ★ UPDATED: find → findOne
-    const job = await Job.findOne({ _id: req.params.id })   // ← updated
-    if (!job) throw new NotFoundError('not found')
-
-    // ★ UPDATED: deleteOne works on a doc, not an array
-    await job.deleteOne()                                   // ← stays correct
-
+    const {
+        user: { userId },
+        params: { id: jobId },
+    } = req
+    const job = await Job.findOneAndDelete({
+        _id: jobId,
+        createdBy: userId,
+    })
+    if (!job) throw new NotFoundError(`job with id: ${jobId} not found`)
     res.status(StatusCodes.NO_CONTENT).send()
 }
 
